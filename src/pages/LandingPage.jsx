@@ -72,10 +72,11 @@ function LandingPage() {
               Neighbor<span className="text-accent">IQ</span>
             </h1>
             <p className="mt-6 max-w-md font-serif text-2xl leading-normal text-muted italic">
-              The intelligent relocation companion that scores any neighborhood in seconds.
+              Neighborhood scores for international students choosing housing in the US—before you sign a
+              lease.
             </p>
             <Link
-              to="/analyze"
+              to="/"
               className="mt-10 inline-flex items-center border border-ink bg-ink px-5 py-3 text-xs tracking-[0.12em] text-paper uppercase transition hover:bg-accent"
             >
               Get Started Now
@@ -94,8 +95,8 @@ function LandingPage() {
             7
           </div>
           <p className="relative z-10 max-w-md text-[13px] leading-[1.8] text-paper/70">
-            Moving to a new city is overwhelming. NeighborIQ aggregates crime data, walkability,
-            cost of living, social media sentiment, and more into a single compatibility score.
+            Renting from overseas is overwhelming. NeighborIQ aggregates crime, walkability, cost of living,
+            and community sentiment into one student-tuned compatibility score per address.
           </p>
           <div className="relative z-10 mt-10 border border-white/15 bg-white/5 px-5 py-4 text-[13px]">
             <span className="text-accent">{'>'} </span>
@@ -126,7 +127,7 @@ function LandingPage() {
             },
             {
               h: 'The Target User',
-              p: 'Students, remote workers, and families moving long-distance with little local context and high-stakes housing decisions.',
+              p: 'International students evaluating US housing from abroad—little local context, tight budgets, and high-stakes lease decisions.',
             },
           ].map((item) => (
             <article
