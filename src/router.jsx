@@ -1,28 +1,24 @@
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import App from './App'
-import LandingPage from './pages/LandingPage'
 import MainPage from './pages/MainPage'
+import SubscribePage from './pages/SubscribePage'
 
 const rootRoute = createRootRoute({
   component: App,
 })
 
-const landingRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  component: LandingPage,
-})
-
 const mainRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/analyze',
+  path: '/',
   component: MainPage,
 })
 
-const routeTree = rootRoute.addChildren([landingRoute, mainRoute])
+const subscribeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/subscribe',
+  component: SubscribePage,
+})
+
+const routeTree = rootRoute.addChildren([mainRoute, subscribeRoute])
 
 export const router = createRouter({ routeTree })
