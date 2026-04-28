@@ -1,99 +1,28 @@
-import { useState } from 'react'
-import { useGoogleLogin } from '@react-oauth/google'
+import { createPortal } from 'react-dom'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-
-const viteGoogleId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim()
-
-function GoogleGIcon() {
-  return (
-    <span className="nav-btn-login-google-mark" aria-hidden>
-      <svg className="nav-btn-login-google-svg" viewBox="0 0 48 48">
-        <path
-          fill="#EA4335"
-          d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.21 17.74 9.5 24 9.5z"
-        />
-        <path
-          fill="#4285F4"
-          d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6C44.43 39.07 46.98 32.34 46.98 24.55z"
-        />
-        <path
-          fill="#FBBC05"
-          d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-        />
-        <path
-          fill="#34A853"
-          d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.71-13.47-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-        />
-        <path fill="none" d="M0 0h48v48H0z" />
-      </svg>
-    </span>
-  )
-}
+import { AuthForm } from './AuthForm'
+import { SettingsModal } from './SettingsModal'
 
 /**
- * Only mount under GoogleOAuthProvider (when VITE_GOOGLE_CLIENT_ID is set).
- */
-function GreenGoogleLoginButton() {
-  const { loginWithGoogleAccessToken } = useAuth()
-  const [oauthErr, setOauthErr] = useState('')
-
-  const login = useGoogleLogin({
-    scope: 'openid profile email',
-    onSuccess: async (tokenResponse) => {
-      setOauthErr('')
-      const at = tokenResponse.access_token
-      if (at) await loginWithGoogleAccessToken(at)
-    },
-    onError: (err) => {
-      const code = err?.error ?? err?.message ?? ''
-      const s = String(code).toLowerCase()
-      if (s.includes('invalid_client') || s.includes('401')) {
-        setOauthErr(
-          'OAuth client not found. In Google Cloud → Credentials, copy the OAuth 2.0 Web client Client ID (ends in .apps.googleusercontent.com). Put that exact string in both VITE_GOOGLE_CLIENT_ID and GOOGLE_CLIENT_ID. Do not paste the Client secret.',
-        )
-      } else {
-        setOauthErr('Google sign-in failed. Check the browser console or your OAuth consent screen settings.')
-      }
-    },
-    onNonOAuthError: () => {
-      setOauthErr(
-        'Google blocked the sign-in prompt (popup or browser privacy settings). Allow popups for this site and try again.',
-      )
-    },
-  })
-
-  return (
-    <div className="nav-auth-login-stack">
-      <button
-        type="button"
-        className="nav-btn-login-google"
-        onClick={() => {
-          setOauthErr('')
-          login()
-        }}
-      >
-        <GoogleGIcon />
-        <span className="nav-btn-login-google-text">Login</span>
-      </button>
-      {oauthErr ? (
-        <p className="nav-auth-oauth-error" role="alert">
-          {oauthErr}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
-/**
- * Google Sign-In + session (server cookie). Renders nothing if Google is not configured.
+ * Login/logout widgets for the nav bar.
+ * The auth modal is portalled to document.body so nav's backdrop-filter
+ * doesn't trap the fixed overlay inside the nav's stacking context.
  * @param {{ variant?: 'nav' | 'subscribe' | 'results' }} props
  */
 export function NavAuthWidgets({ variant = 'nav' }) {
-  const { user, loading, googleSignInEnabled, googleClientIdFormatOk, logout } = useAuth()
+  const { user, loading, logout } = useAuth()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
-  if (!viteGoogleId || !googleSignInEnabled) {
-    return null
-  }
+  useEffect(() => {
+    if (!modalOpen) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') setModalOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [modalOpen])
 
   const wrapClass =
     variant === 'subscribe'
@@ -110,35 +39,80 @@ export function NavAuthWidgets({ variant = 'nav' }) {
     )
   }
 
-  if (user) {
-    return (
-      <div className={wrapClass}>
-        {user.picture ? (
-          <img src={user.picture} alt="" className="nav-auth-avatar" width={28} height={28} />
-        ) : null}
-        <span className="nav-auth-name" title={user.email || ''}>
-          {user.name || user.email || 'Signed in'}
-        </span>
-        <button
-          type="button"
-          className="nav-text-btn nav-auth-logout"
-          title="Signs out your Google account on this app. NeighborIQ Pro is separate — use Manage to change billing."
-          onClick={() => void logout()}
-        >
-          Log out
-        </button>
-      </div>
-    )
-  }
-
   return (
-    <div className={`${wrapClass} nav-auth-google`}>
-      {!googleClientIdFormatOk ? (
-        <p className="nav-auth-oauth-error" role="status">
-          GOOGLE_CLIENT_ID on the server does not look like a Web Client ID. Fix .env and restart the API.
-        </p>
-      ) : null}
-      <GreenGoogleLoginButton />
-    </div>
+    <>
+      <div className={wrapClass}>
+        {user ? (
+          <>
+            <span className="nav-auth-name" title={user.email}>
+              Hi {user.name || user.email}
+            </span>
+            {variant === 'results' && (
+              <button
+                type="button"
+                className="nav-settings-btn"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Account settings"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  />
+                  <path
+                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+            <button
+              type="button"
+              className="nav-text-btn nav-auth-logout"
+              onClick={() => logout()}
+            >
+              Log out
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="nav-btn-login"
+            onClick={() => setModalOpen(true)}
+          >
+            Log in
+          </button>
+        )}
+      </div>
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+
+      {modalOpen &&
+        createPortal(
+          <div
+            className="auth-modal-overlay"
+            onClick={() => setModalOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sign in"
+          >
+            <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="auth-modal-close"
+                type="button"
+                onClick={() => setModalOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+              <div className="auth-modal-logo">
+                neighbor<span>IQ</span>
+              </div>
+              <AuthForm onSuccess={() => setModalOpen(false)} />
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }

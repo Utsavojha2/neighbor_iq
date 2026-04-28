@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --ink: #0d0d0f;
+  --paper: #f5f2eb;
+  --accent: #2a5cff;
+  --accent2: #ff4d2e;
+  --muted: #6b6860;
+  --border: #d8d4cb;
+  --card: #ffffff;
+  --tag-bg: #eae7df;
+
+  --cat-1: #ffd0c8;
+  --cat-2: #c8e4d0;
+  --cat-3: #c8d8ff;
+  --cat-4: #ffeac8;
+  --cat-5: #e8c8ff;
+  --cat-6: #c8f0f0;
+  --cat-7: #ffd4f0;
+}
+
+@theme inline {
+  --font-sans: 'DM Mono', monospace;
+  --font-display: 'Syne', sans-serif;
+  --font-serif: 'Instrument Serif', serif;
+
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-tag: var(--tag-bg);
+
+  --color-cat-1: var(--cat-1);
+  --color-cat-2: var(--cat-2);
+  --color-cat-3: var(--cat-3);
+  --color-cat-4: var(--cat-4);
+  --color-cat-5: var(--cat-5);
+  --color-cat-6: var(--cat-6);
+  --color-cat-7: var(--cat-7);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}

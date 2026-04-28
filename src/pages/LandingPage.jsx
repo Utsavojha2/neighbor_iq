@@ -22,7 +22,7 @@ const categories = [
     title: 'Natural Disaster Risk',
     subtitle: '+1 point if low risk',
     desc: "Uses FEMA's National Risk Index to evaluate local hazard exposure at tract level.",
-    api: 'FEMA NRI',
+    api: 'FEMA',
     color: 'text-cat-3',
   },
   {
@@ -46,7 +46,7 @@ const categories = [
     title: 'Nightlife & Social Scene',
     subtitle: '+1 point if vibrant',
     desc: 'Evaluates quantity and quality of cafes, bars, restaurants, gyms, and local hangout spots.',
-    api: 'Yelp Fusion',
+    api: 'YELP',
     color: 'text-cat-6',
   },
   {

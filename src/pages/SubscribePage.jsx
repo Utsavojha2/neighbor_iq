@@ -1,51 +1,68 @@
-import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { NavAuthWidgets } from '../components/NavAuthWidgets'
+import { AuthForm } from '../components/AuthForm'
 import { useSubscription } from '../context/SubscriptionContext'
-import { requestStripeCheckoutSession } from '../lib/stripeCheckout'
+import { useAuth } from '../context/AuthContext'
 import { PRO_PLAN_BENEFITS } from '../lib/proPlanBenefits'
-import { STRIPE_CHECKOUT_SETUP_MESSAGE } from '../lib/stripeSetupMessage'
 
 export default function SubscribePage() {
-  const {
-    isPaid,
-    stripeCheckoutEnabled,
-    stripeSetupHint,
-    openBillingPortal,
-    stripeCustomerId,
-  } = useSubscription()
+  const { isPaid, startCheckout } = useSubscription()
+  const { user, token } = useAuth()
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [pendingCheckout, setPendingCheckout] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
   const [showCancelNote] = useState(
-    () => new URLSearchParams(window.location.search).get('stripe_cancel') === '1',
+    () => new URLSearchParams(window.location.search).get('sub_cancel') === '1',
   )
 
-  const startCheckout = async () => {
-    if (isPaid) return
-    setCheckoutError('')
-    if (!stripeCheckoutEnabled) {
-      setCheckoutError(stripeSetupHint || STRIPE_CHECKOUT_SETUP_MESSAGE)
+  useEffect(() => {
+    if (!authModalOpen) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') setAuthModalOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [authModalOpen])
+
+  const doCheckout = useCallback(
+    async (tkn) => {
+      setCheckoutError('')
+      setCheckoutLoading(true)
+      try {
+        const result = await startCheckout(tkn)
+        if (result.url) {
+          window.location.href = result.url
+          return
+        }
+        setCheckoutError(result.error || 'Could not start checkout. Try again.')
+      } finally {
+        setCheckoutLoading(false)
+      }
+    },
+    [startCheckout],
+  )
+
+  useEffect(() => {
+    if (pendingCheckout && token) {
+      setPendingCheckout(false)
+      void doCheckout(token)
+    }
+  }, [pendingCheckout, token, doCheckout])
+
+  const handleSubscribeClick = () => {
+    if (!user || !token) {
+      setAuthModalOpen(true)
       return
     }
-    setCheckoutLoading(true)
-    try {
-      const data = await requestStripeCheckoutSession()
-      if (data.url) {
-        window.location.href = data.url
-        return
-      }
-      if (data.error === 'stripe_not_configured') {
-        setCheckoutError(stripeSetupHint || STRIPE_CHECKOUT_SETUP_MESSAGE)
-        return
-      }
-      setCheckoutError(data.message || 'Could not start checkout. Try again.')
-    } catch {
-      setCheckoutError(
-        'Could not reach the payment server. Start both processes with npm run dev:full (Vite + API on port 3001).',
-      )
-    } finally {
-      setCheckoutLoading(false)
-    }
+    void doCheckout(token)
+  }
+
+  const handleAuthSuccess = () => {
+    setAuthModalOpen(false)
+    setPendingCheckout(true)
   }
 
   return (
@@ -66,77 +83,95 @@ export default function SubscribePage() {
         <div className="subscribe-page-card">
           <p className="sub-modal-tag">NeighborIQ Pro</p>
           <h1 className="subscribe-page-title">Unlock full reports</h1>
-          <p className="sub-modal-body">
-            Subscribe with Stripe Checkout (secure redirect). After payment, you return here and we verify
-            your session before unlocking Pro. Access is only granted after a successful payment.
-          </p>
-          <p className="sub-modal-benefits-intro">What you get with Pro</p>
-          <ul className="sub-modal-list sub-modal-list-benefits">
-            {PRO_PLAN_BENEFITS.map((line) => (
-              <li key={line}>{line}</li>
+
+          
+          <div className="sub-modal-benefits">
+            {PRO_PLAN_BENEFITS.map((b) => (
+              <div key={b.title} className="sub-modal-benefit-row">
+                <div
+                  className="sub-modal-benefit-icon"
+                  dangerouslySetInnerHTML={{ __html: b.icon }}
+                />
+                <div className="sub-modal-benefit-text">
+                  <div className="sub-modal-benefit-title">{b.title}</div>
+                  <div className="sub-modal-benefit-desc">{b.desc}</div>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
           <div className="sub-modal-price">
             <span className="sub-modal-price-num">$9</span>
             <span className="sub-modal-price-unit">/mo</span>
-            <span className="sub-modal-price-note"> · price set in Stripe Dashboard</span>
           </div>
 
           {isPaid ? (
             <div className="subscribe-page-success" role="status">
               <p className="subscribe-page-success-title">You&apos;re subscribed</p>
               <p className="subscribe-page-success-body">
-                PDF downloads are unlocked. Run a neighborhood analysis from the home page, then use
-                Download PDF on your results.
+                PDF downloads are unlocked. Run a neighborhood analysis from the home page.
               </p>
               <div className="subscribe-page-success-actions">
                 <Link to="/" className="sub-modal-cta subscribe-page-inline-cta">
                   Start analyzing
                 </Link>
-                {stripeCheckoutEnabled && stripeCustomerId ? (
-                  <button
-                    type="button"
-                    className="sub-modal-secondary"
-                    onClick={() => {
-                      void openBillingPortal()
-                    }}
-                  >
-                    Manage billing
-                  </button>
-                ) : null}
               </div>
             </div>
           ) : (
             <>
-              {showCancelNote ? (
+              {showCancelNote && (
                 <p className="subscribe-page-cancel-note" role="status">
                   Checkout was cancelled. You can try again whenever you&apos;re ready.
                 </p>
-              ) : null}
-              {checkoutError ? (
+              )}
+              {checkoutError && (
                 <p className="sub-modal-error" role="alert">
                   {checkoutError}
                 </p>
-              ) : null}
+              )}
               <div className="sub-modal-actions subscribe-page-actions">
+                <Link to="/" className="sub-modal-secondary subscribe-page-secondary-link">
+                  Not now
+                </Link>
                 <button
                   type="button"
                   className="sub-modal-cta"
                   disabled={checkoutLoading}
-                  onClick={() => {
-                    void startCheckout()
-                  }}
+                  onClick={handleSubscribeClick}
                 >
-                  {checkoutLoading ? 'Redirecting…' : 'Subscribe Pro'}
+                  {checkoutLoading ? 'Redirecting…' : 'Subscribe'}
                 </button>
-                <Link to="/" className="sub-modal-secondary subscribe-page-secondary-link">
-                  Not now
-                </Link>
               </div>
             </>
           )}
         </div>
       </main>
+
+      {authModalOpen &&
+        createPortal(
+          <div
+            className="auth-modal-overlay"
+            onClick={() => setAuthModalOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sign in"
+          >
+            <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="auth-modal-close"
+                type="button"
+                onClick={() => setAuthModalOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+              <div className="auth-modal-logo">
+                neighbor<span>IQ</span>
+              </div>
+              <AuthForm onSuccess={handleAuthSuccess} />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

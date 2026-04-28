@@ -6,9 +6,22 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    port: 5175,
     proxy: {
-      '/api': {
-        target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3001',
+      '/score': {
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
+      '/subscriptions': {
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
+      '/webhooks': {
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
     },

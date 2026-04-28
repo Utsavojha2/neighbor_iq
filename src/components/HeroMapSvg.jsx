@@ -55,15 +55,6 @@ export function HeroMapSvg({ className }) {
       <line x1="409" y1="0" x2="409" y2="420" stroke="#1D9E75" strokeWidth="0.6" opacity="0.25" />
       <line x1="493" y1="0" x2="493" y2="420" stroke="#1D9E75" strokeWidth="0.6" opacity="0.25" />
       <line x1="573" y1="0" x2="573" y2="420" stroke="#1D9E75" strokeWidth="1" opacity="0.35" />
-      <circle cx="323" cy="197" r="145" fill="none" stroke="#1D9E75" strokeWidth="0.4" opacity="0.12" />
-      <circle cx="323" cy="197" r="108" fill="none" stroke="#1D9E75" strokeWidth="0.5" opacity="0.2" />
-      <circle cx="323" cy="197" r="76" fill="none" stroke="#1D9E75" strokeWidth="0.6" opacity="0.35" />
-      <circle cx="323" cy="197" r="50" fill="none" stroke="#1D9E75" strokeWidth="0.7" opacity="0.55" />
-      <circle cx="323" cy="197" r="28" fill="none" stroke="#1D9E75" strokeWidth="0.9" opacity="0.8" />
-      <circle cx="323" cy="197" r="9" fill="#1D9E75" opacity="0.25" />
-      <circle cx="323" cy="197" r="5.5" fill="#1D9E75" opacity="0.7" />
-      <circle cx="323" cy="197" r="3" fill="#5DCAA5" />
-      <circle cx="323" cy="197" r="1.5" fill="#E1F5EE" />
       <circle cx="117" cy="96" r="4" fill="#5DCAA5" opacity="0.7" />
       <circle cx="199" cy="293" r="4" fill="#5DCAA5" opacity="0.7" />
       <circle cx="451" cy="160" r="4" fill="#5DCAA5" opacity="0.7" />
