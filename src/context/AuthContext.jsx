@@ -10,10 +10,10 @@ import {
 } from 'react'
 
 const AuthContext = createContext(null)
+const TOKEN_KEY = 'neighboriq_token'
 
-async function fetchAuth(path, options = {}) {
+async function apiFetch(path, options = {}) {
   const r = await fetch(path, {
-    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -23,15 +23,27 @@ async function fetchAuth(path, options = {}) {
   return r.json().catch(() => ({}))
 }
 
+function normalizeError(data) {
+  if (!data) return 'Request failed'
+  if (Array.isArray(data.message)) return data.message.join('. ')
+  return data.message || data.error || 'Request failed'
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [googleSignInEnabled, setGoogleSignInEnabled] = useState(false)
-  const [googleClientIdFormatOk, setGoogleClientIdFormatOk] = useState(true)
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (currentToken) => {
+    const t = currentToken ?? localStorage.getItem(TOKEN_KEY)
+    if (!t) {
+      setUser(null)
+      return
+    }
     try {
-      const data = await fetchAuth('/api/auth/me')
+      const data = await apiFetch('/auth/me', {
+        headers: { Authorization: `Bearer ${t}` },
+      })
       setUser(data.user ?? null)
     } catch {
       setUser(null)
@@ -39,80 +51,46 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const cfg = await fetchAuth('/api/auth/config')
-        setGoogleSignInEnabled(Boolean(cfg.googleSignInEnabled))
-        setGoogleClientIdFormatOk(cfg.googleClientIdFormatOk !== false)
-      } catch {
-        setGoogleSignInEnabled(false)
-        setGoogleClientIdFormatOk(true)
+    void refreshUser(token).then(() => setLoading(false))
+  }, [refreshUser, token])
+
+  const login = useCallback(
+    async (email, password) => {
+      const data = await apiFetch('/auth/sign-in', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+      if (data.accessToken) {
+        localStorage.setItem(TOKEN_KEY, data.accessToken)
+        setToken(data.accessToken)
+        await refreshUser(data.accessToken)
+        return { ok: true }
       }
-      await refreshUser()
-      setLoading(false)
-    })()
-  }, [refreshUser])
+      return { ok: false, error: normalizeError(data) }
+    },
+    [refreshUser],
+  )
 
-  const loginWithGoogleCredential = useCallback(async (credential) => {
-    const data = await fetchAuth('/api/auth/google', {
+  const signup = useCallback(async (name, email, password) => {
+    const data = await apiFetch('/auth/sign-up', {
       method: 'POST',
-      body: JSON.stringify({ credential }),
+      body: JSON.stringify({ name, email, password }),
     })
-    if (data.ok && data.user) {
-      setUser(data.user)
-      return { ok: true }
+    if (data.message && !data.statusCode) {
+      return { ok: true, message: data.message }
     }
-    return { ok: false, error: data.error }
+    return { ok: false, error: normalizeError(data) }
   }, [])
 
-  const loginWithGoogleAccessToken = useCallback(async (accessToken) => {
-    const data = await fetchAuth('/api/auth/google-access-token', {
-      method: 'POST',
-      body: JSON.stringify({ accessToken }),
-    })
-    if (data.ok && data.user) {
-      setUser(data.user)
-      return { ok: true }
-    }
-    return { ok: false, error: data.error }
-  }, [])
-
-  const logout = useCallback(async () => {
-    try {
-      await fetchAuth('/api/auth/logout', { method: 'POST', body: '{}' })
-    } catch {
-      /* ignore */
-    }
-    try {
-      const { googleLogout } = await import('@react-oauth/google')
-      googleLogout()
-    } catch {
-      /* gsi not loaded */
-    }
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY)
+    setToken(null)
     setUser(null)
   }, [])
 
   const value = useMemo(
-    () => ({
-      user,
-      loading,
-      googleSignInEnabled,
-      googleClientIdFormatOk,
-      refreshUser,
-      loginWithGoogleCredential,
-      loginWithGoogleAccessToken,
-      logout,
-    }),
-    [
-      user,
-      loading,
-      googleSignInEnabled,
-      googleClientIdFormatOk,
-      refreshUser,
-      loginWithGoogleCredential,
-      loginWithGoogleAccessToken,
-      logout,
-    ],
+    () => ({ user, loading, token, login, signup, logout, refreshUser }),
+    [user, loading, token, login, signup, logout, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -120,8 +98,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }

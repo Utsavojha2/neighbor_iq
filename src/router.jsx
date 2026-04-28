@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter } from '@tanstack/react-rout
 import App from './App'
 import MainPage from './pages/MainPage'
 import SubscribePage from './pages/SubscribePage'
+import ConfirmPage from './pages/ConfirmPage'
 
 const rootRoute = createRootRoute({
   component: App,
@@ -19,6 +20,12 @@ const subscribeRoute = createRoute({
   component: SubscribePage,
 })
 
-const routeTree = rootRoute.addChildren([mainRoute, subscribeRoute])
+const confirmRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/confirm/$token',
+  component: ConfirmPage,
+})
+
+const routeTree = rootRoute.addChildren([mainRoute, subscribeRoute, confirmRoute])
 
 export const router = createRouter({ routeTree })

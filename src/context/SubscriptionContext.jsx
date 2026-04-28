@@ -8,13 +8,35 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useAuth } from './AuthContext'
 
 const STORAGE_KEY = 'neighboriq_subscription'
-const STORAGE_CUSTOMER_KEY = 'neighboriq_stripe_customer_id'
+const AUTH_TOKEN_KEY = 'neighboriq_token'
 
 const SubscriptionContext = createContext(null)
 
+function getStoredToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+async function subFetch(path, token, options = {}) {
+  const r = await fetch(path, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+    ...options,
+  })
+  return r.json().catch(() => ({}))
+}
+
 export function SubscriptionProvider({ children }) {
+  const { token } = useAuth()
   const [isPaid, setIsPaid] = useState(() => {
     try {
       return localStorage.getItem(STORAGE_KEY) === 'active'
@@ -22,204 +44,100 @@ export function SubscriptionProvider({ children }) {
       return false
     }
   })
-  const [stripeCustomerId, setStripeCustomerId] = useState(() => {
-    try {
-      return localStorage.getItem(STORAGE_CUSTOMER_KEY) || ''
-    } catch {
-      return ''
-    }
-  })
   const [paywallOpen, setPaywallOpen] = useState(false)
-  const [stripeCheckoutEnabled, setStripeCheckoutEnabled] = useState(false)
-  const [stripeSetupHint, setStripeSetupHint] = useState('')
 
-  useEffect(() => {
-    fetch('/api/stripe/config', { credentials: 'include' })
-      .then((r) => r.json())
-      .then((d) => {
-        setStripeCheckoutEnabled(Boolean(d.checkoutEnabled))
-        setStripeSetupHint(typeof d.setupHint === 'string' ? d.setupHint : '')
-      })
-      .catch(() => {
-        setStripeCheckoutEnabled(false)
-        setStripeSetupHint(
-          'The app could not reach the API (no response from /api/stripe/config). Run both servers from the project folder: npm run dev:full — or run npm run dev:api in one terminal and npm run dev in another. The API must listen on port 3001 (see API_PORT in .env).',
-        )
-      })
+  const setActiveStatus = useCallback((active) => {
+    setIsPaid(active)
+    try {
+      if (active) {
+        localStorage.setItem(STORAGE_KEY, 'active')
+      } else {
+        localStorage.removeItem(STORAGE_KEY)
+      }
+    } catch {
+      /* ignore */
+    }
   }, [])
 
+  const refreshStatus = useCallback(async () => {
+    const token = getStoredToken()
+    if (!token) return
+    try {
+      const data = await subFetch('/subscriptions/status', token)
+      const sub = data.subscription
+      const active = sub?.status === 'active' || sub?.status === 'trialing'
+      setActiveStatus(active)
+    } catch {
+      /* keep local state on network errors */
+    }
+  }, [setActiveStatus])
+
+  // Sync subscription state on auth changes:
+  // - token gone (logout) → clear immediately
+  // - token present (login / page reload) → fetch real status from server
+  useEffect(() => {
+    if (!token) {
+      setIsPaid(false)
+      try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+    } else {
+      void refreshStatus()
+    }
+  }, [token, refreshStatus])
+
+  // Handle sub_success redirect back from Stripe checkout
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('stripe_cancel') === '1') {
-      params.delete('stripe_cancel')
-      const q = params.toString()
-      window.history.replaceState(
-        {},
-        '',
-        `${window.location.pathname}${q ? `?${q}` : ''}${window.location.hash}`,
+    if (params.get('sub_success') !== '1') return
+    params.delete('sub_success')
+    const q = params.toString()
+    window.history.replaceState(
+      {},
+      '',
+      `${window.location.pathname}${q ? `?${q}` : ''}${window.location.hash}`,
+    )
+    void refreshStatus()
+  }, [refreshStatus])
+
+  const startCheckout = useCallback(async (token) => {
+    const successUrl = `${window.location.origin}/?sub_success=1`
+    const cancelUrl = `${window.location.origin}${window.location.pathname}`
+    try {
+      const data = await subFetch(
+        '/subscriptions/checkout',
+        token,
+        { method: 'POST', body: JSON.stringify({ successUrl, cancelUrl }) },
       )
-    }
-  }, [])
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('stripe_success') !== '1') return undefined
-    const sessionId = params.get('session_id')
-    if (!sessionId) {
-      params.delete('stripe_success')
-      const q = params.toString()
-      window.history.replaceState(
-        {},
-        '',
-        `${window.location.pathname}${q ? `?${q}` : ''}${window.location.hash}`,
-      )
-      return undefined
-    }
-
-    ;(async () => {
-      try {
-        const r = await fetch(
-          `/api/stripe/session?session_id=${encodeURIComponent(sessionId)}`,
-          { credentials: 'include' },
-        )
-        const data = await r.json()
-        if (data.ok) {
-          setIsPaid(true)
-          if (data.customerId) {
-            setStripeCustomerId(data.customerId)
-            try {
-              localStorage.setItem(STORAGE_CUSTOMER_KEY, data.customerId)
-            } catch {
-              /* ignore */
-            }
-          }
-          try {
-            localStorage.setItem(STORAGE_KEY, 'active')
-          } catch {
-            /* ignore */
-          }
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        const p = new URLSearchParams(window.location.search)
-        p.delete('stripe_success')
-        p.delete('session_id')
-        const q = p.toString()
-        window.history.replaceState(
-          {},
-          '',
-          `${window.location.pathname}${q ? `?${q}` : ''}${window.location.hash}`,
-        )
-      }
-    })()
-
-    return undefined
-  }, [])
-
-  useEffect(() => {
-    if (!stripeCustomerId || !isPaid || !stripeCheckoutEnabled) return undefined
-    let cancelled = false
-    ;(async () => {
-      try {
-        const r = await fetch(
-          `/api/stripe/subscription-status?customer_id=${encodeURIComponent(stripeCustomerId)}`,
-          { credentials: 'include' },
-        )
-        if (!r.ok) return
-        const data = await r.json()
-        if (cancelled) return
-        if (data.active === false) {
-          setIsPaid(false)
-          setStripeCustomerId('')
-          try {
-            localStorage.removeItem(STORAGE_KEY)
-            localStorage.removeItem(STORAGE_CUSTOMER_KEY)
-          } catch {
-            /* ignore */
-          }
-        }
-      } catch {
-        /* keep local state on network errors */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [stripeCustomerId, isPaid, stripeCheckoutEnabled])
-
-  const subscribe = useCallback(() => {
-    setIsPaid(true)
-    try {
-      localStorage.setItem(STORAGE_KEY, 'active')
+      if (data.sessionUrl) return { url: data.sessionUrl }
+      const msg = Array.isArray(data.message) ? data.message.join('. ') : data.message
+      return { url: null, error: msg || 'Could not start checkout.' }
     } catch {
-      /* ignore */
-    }
-    setPaywallOpen(false)
-  }, [])
-
-  const cancelSubscription = useCallback(() => {
-    setIsPaid(false)
-    setStripeCustomerId('')
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-      localStorage.removeItem(STORAGE_CUSTOMER_KEY)
-    } catch {
-      /* ignore */
+      return { url: null, error: 'Could not reach the server. Make sure the backend is running.' }
     }
   }, [])
 
-  const openBillingPortal = useCallback(async () => {
-    let id = stripeCustomerId
-    if (!id) {
+  const cancelSubscription = useCallback(async () => {
+    setActiveStatus(false)
+    const token = getStoredToken()
+    if (token) {
       try {
-        id = localStorage.getItem(STORAGE_CUSTOMER_KEY) || ''
+        await subFetch('/subscriptions/cancel', token, { method: 'POST', body: '{}' })
       } catch {
-        id = ''
+        /* ignore — local state already cleared */
       }
     }
-    if (!id) return false
-    try {
-      const r = await fetch('/api/stripe/create-portal-session', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId: id }),
-      })
-      const data = await r.json()
-      if (data.url) {
-        window.location.href = data.url
-        return true
-      }
-    } catch {
-      /* ignore */
-    }
-    return false
-  }, [stripeCustomerId])
+  }, [setActiveStatus])
 
   const value = useMemo(
     () => ({
       isPaid,
-      subscribe,
-      cancelSubscription,
       paywallOpen,
       openPaywall: () => setPaywallOpen(true),
       closePaywall: () => setPaywallOpen(false),
-      stripeCheckoutEnabled,
-      stripeSetupHint,
-      stripeCustomerId,
-      openBillingPortal,
-    }),
-    [
-      isPaid,
-      subscribe,
+      startCheckout,
       cancelSubscription,
-      paywallOpen,
-      stripeCheckoutEnabled,
-      stripeSetupHint,
-      stripeCustomerId,
-      openBillingPortal,
-    ],
+      refreshStatus,
+    }),
+    [isPaid, paywallOpen, startCheckout, cancelSubscription, refreshStatus],
   )
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>
@@ -227,8 +145,6 @@ export function SubscriptionProvider({ children }) {
 
 export function useSubscription() {
   const ctx = useContext(SubscriptionContext)
-  if (!ctx) {
-    throw new Error('useSubscription must be used within SubscriptionProvider')
-  }
+  if (!ctx) throw new Error('useSubscription must be used within SubscriptionProvider')
   return ctx
 }
